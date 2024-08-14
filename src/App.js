@@ -1,24 +1,29 @@
-import logo from './logo.svg';
 import './App.css';
+import React from 'react';
+import { Provider } from 'react-redux';
+import store from './Redux/store';
+import AddPage from './Pages/Addpage';
+import ViewPage from './Pages/Viewpage';
+import { Toaster } from 'react-hot-toast';
+import { BrowserRouter, Route, Routes } from 'react-router-dom';
 
 function App() {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <Provider store={store}>
+      <div className="App">
+      <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<ViewPage />} />
+        <Route path="/add" element={<AddPage />} />
+      </Routes>
+
+    </BrowserRouter>
+        <Toaster
+  position="top-center"
+  reverseOrder={false}
+/>
+      </div>
+    </Provider>
   );
 }
 
