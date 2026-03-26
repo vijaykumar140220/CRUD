@@ -28,6 +28,19 @@ const ViewPage = () => {
     state: "",
   });
 
+  const actionOptions = [
+    "INITIAL DATA PORTING",
+    "ISSUED",
+    "RETURNED",
+    "REPAIR SENT",
+    "REPAIR RECEIVED",
+    "DISPOSED",
+    "MAPPED",
+    "IMAGE FLASHED",
+    "TRANSFERRED",
+    "RECEIPT"
+  ];
+
   useEffect(() => {
     dispatch(fetchUsersRequest());
   }, [dispatch]);
@@ -40,87 +53,19 @@ const ViewPage = () => {
     }
   }, [deleteUserResponse, dispatch]);
 
-  // Helper function to format date as DD-MM-YYYY
-  const formatDateToDisplay = (dateString) => {
-    if (!dateString) return "N/A";
-    const d = new Date(dateString);
-    const day = String(d.getDate()).padStart(2, '0');
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const year = d.getFullYear();
-    return `${day}-${month}-${year}`;
-  };
-
   const exportToExcel = () => {
     if (filteredUsers.length === 0) {
       toast.error("No data available to export");
       return;
     }
-    const exportData = filteredUsers.map(({ _id, __v, ...rest }) => rest);
+    const exportData = filteredUsers.map(({ _id, __v, createdAt, updatedAt, ...rest }) => rest);
     const worksheet = XLSX.utils.json_to_sheet(exportData);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "PXE_Inventory");
-    XLSX.writeFile(workbook, `PXE_Export_${new Date().toLocaleDateString()}.xlsx`);
+    const fileName = `PXE_Export_${new Date().toISOString().split('T')[0]}.xlsx`;
+    XLSX.writeFile(workbook, fileName);
+    toast.success("Excel file exported successfully!");
   };
-
-  const handleEdit = (user) => {
-    navigate("/add", { state: { userToEdit: user } });
-  };
-
-  const handleDelete = (id) => {
-    if (window.confirm("Are you sure you want to delete this record?")) {
-      dispatch(deleteUserRequest(id));
-    }
-  };
-
-  const handleFilterChange = (e) => {
-    const { name, value } = e.target;
-    setFilters((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const getTypeBadge = (type) => {
-    const style = {
-      padding: "4px 12px",
-      borderRadius: "6px",
-      fontSize: "0.75rem",
-      fontWeight: "bold",
-      color: "white",
-      display: "inline-block",
-      backgroundColor: type === "ISSUE" ? "#00bad1" : "#f1a500",
-      textTransform: "capitalize" // Ensures badge text is also capitalized
-    };
-    return <span style={style}>{type?.toLowerCase()}</span>;
-  };
-
-  const getStateBadge = (state) => {
-    const isServiceable = state === "SERVICEABLE";
-    const style = {
-      padding: "4px 12px",
-      borderRadius: "6px",
-      fontSize: "0.75rem",
-      fontWeight: "bold",
-      color: "white",
-      display: "inline-block",
-      backgroundColor: isServiceable ? "#28a745" : "#dc3545",
-      textTransform: "capitalize"
-    };
-    return <span style={style}>{state?.toLowerCase()}</span>;
-  };
-
-  // ✅ SORTING LOGIC: Ascending order by PXE Serial Number
-  const sortedUsers = [...users].sort((a, b) => {
-    const serialA = a.pxeSerialNumber || "";
-    const serialB = b.pxeSerialNumber || "";
-    return serialA.localeCompare(serialB, undefined, { numeric: true, sensitivity: 'base' });
-  });
-
-  const filteredUsers = sortedUsers.filter((user) => {
-    const matchSerial = user.pxeSerialNumber?.toLowerCase().includes(filters.serial.toLowerCase());
-    const matchDate = filters.date ? user.date?.split("T")[0] === filters.date : true;
-    const matchType = filters.type ? user.transactionType === filters.type : true;
-    const matchTo = user.to?.toLowerCase().includes(filters.to.toLowerCase());
-    const matchState = filters.state ? user.serviceState === filters.state : true;
-    return matchSerial && matchDate && matchType && matchTo && matchState;
-  });
 
   const handleImportExcel = (e) => {
     const file = e.target.files[0];
@@ -135,24 +80,19 @@ const ViewPage = () => {
         const ws = wb.Sheets[wsname];
         const rawData = XLSX.utils.sheet_to_json(ws);
 
-        const formattedData = rawData.map((item, index) => {
-          let rawDate = item["Date & Time"] || item["Date"] || item["date"];
-          if (!rawDate) throw new Error(`Row ${index + 1}: Date column is missing.`);
-
+        const formattedData = rawData.map((item) => {
+          let rawDate = item["Date"] || item["date"];
           const d = new Date(rawDate);
-          if (isNaN(d.getTime())) throw new Error(`Row ${index + 1}: Invalid date format.`);
-
-          const dateOnly = d.toISOString().split('T')[0];
-
+          
           return {
-            date: dateOnly,
-            pxeSerialNumber: String(item["PXE Serial Number"] || item["pxeSerialNumber"] || ""),
-            transactionType: String(item["Transaction Type"] || item["transactionType"] || ""),
-            from: String(item["From"] || item["from"] || ""),
-            to: String(item["To"] || item["to"] || ""),
-            reason: String(item["Reason"] || item["reason"] || "Bulk Import"),
-            serviceState: String(item["Service State"] || item["serviceState"] || "SERVICEABLE"),
-            remarks: String(item["Remarks"] || item["remarks"] || ""),
+            date: !isNaN(d.getTime()) ? d.toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+            pxeSerialNumber: String(item["Serial Number"] || item["pxeSerialNumber"] || ""),
+            transactionType: String(item["Action"] || item["transactionType"] || "").toUpperCase(),
+            from: String(item["Location"] || item["from"] || "N/A"),
+            to: String(item["To"] || item["to"] || "Warehouse"),
+            reason: String(item["Reason"] || item["reason"] || "Bulk Excel Import"), // Fixes required reason error
+            serviceState: String(item["Status"] || item["serviceState"] || "SERVICEABLE").toUpperCase(),
+            remarks: String(item["Remarks"] || item["remarks"] || "Ok"),
           };
         });
 
@@ -166,16 +106,89 @@ const ViewPage = () => {
           toast.success(`${formattedData.length} records imported!`);
           dispatch(fetchUsersRequest());
         } else {
-          const errorText = await response.text();
-          throw new Error(errorText || "Server rejected data.");
+          throw new Error("Server rejected data. Check console.");
         }
       } catch (err) {
         toast.error(`Import Error: ${err.message}`);
       }
     };
     reader.readAsBinaryString(file);
-    e.target.value = null;
+    e.target.value = null; 
   };
+
+  const formatDateToDisplay = (dateString) => {
+    if (!dateString) return "N/A";
+    const d = new Date(dateString);
+    return `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
+  };
+
+  const handleFilterChange = (e) => {
+    const { name, value } = e.target;
+    setFilters((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const getTypeBadge = (type) => {
+    const upperType = type?.toUpperCase() || "N/A";
+    let bgColor = "#6c757d"; 
+    if (upperType === "ISSUED" || upperType === "ISSUE") bgColor = "#00bad1";
+    if (upperType === "RETURNED" || upperType === "RECEIPT") bgColor = "#f1a500";
+    if (upperType === "REPAIR SENT") bgColor = "#6f42c1";
+    if (upperType === "DISPOSED") bgColor = "#dc3545";
+    if (upperType === "INITIAL DATA PORTING") bgColor = "#28a745";
+
+    return (
+      <span style={{
+        padding: "4px 12px", borderRadius: "6px", fontSize: "0.75rem",
+        fontWeight: "bold", color: "white", display: "inline-block",
+        backgroundColor: bgColor, minWidth: "100px"
+      }}>
+        {upperType}
+      </span>
+    );
+  };
+
+  const getStateBadge = (state) => {
+    const upperState = state?.toUpperCase();
+    const isServiceable = upperState === "SERVICEABLE";
+    return (
+      <span style={{
+        padding: "4px 12px", borderRadius: "6px", fontSize: "0.75rem",
+        fontWeight: "bold", color: "white", display: "inline-block",
+        backgroundColor: isServiceable ? "#28a745" : "#dc3545"
+      }}>
+        {upperState || "N/A"}
+      </span>
+    );
+  };
+
+  const sortedUsers = [...users].sort((a, b) => {
+    const serialA = a.pxeSerialNumber || "";
+    const serialB = b.pxeSerialNumber || "";
+    return serialA.localeCompare(serialB, undefined, { numeric: true, sensitivity: 'base' });
+  });
+
+  const filteredUsers = sortedUsers.filter((user) => {
+    const matchSerial = (user.pxeSerialNumber || "").toLowerCase().includes(filters.serial.toLowerCase());
+    const matchDate = filters.date ? user.date?.split("T")[0] === filters.date : true;
+    
+    // ✅ IMPROVED FILTER LOGIC FOR 'ISSUED'
+    let matchType = true;
+    if (filters.type) {
+        const dbType = (user.transactionType || "").toUpperCase();
+        const filterVal = filters.type.toUpperCase();
+        
+        // This handles if DB has "ISSUE" but filter is "ISSUED" or vice versa
+        if (filterVal === "ISSUED" || filterVal === "ISSUE") {
+            matchType = (dbType === "ISSUED" || dbType === "ISSUE");
+        } else {
+            matchType = dbType === filterVal;
+        }
+    }
+
+    const matchTo = (user.to || "").toLowerCase().includes(filters.to.toLowerCase());
+    const matchState = filters.state ? (user.serviceState || "").toUpperCase() === filters.state.toUpperCase() : true;
+    return matchSerial && matchDate && matchType && matchTo && matchState;
+  });
 
   return (
     <div className="container-fluid px-4 py-5" style={{ background: "#f8f9fa", minHeight: "100vh" }}>
@@ -200,11 +213,12 @@ const ViewPage = () => {
             <input type="date" name="date" className="form-control" value={filters.date} onChange={handleFilterChange} />
           </div>
           <div className="col-md-2">
-            <label className="filter-label">Type</label>
+            <label className="filter-label">Action (Type)</label>
             <select name="type" className="form-select" value={filters.type} onChange={handleFilterChange}>
-              <option value="">All</option>
-              <option value="ISSUE">ISSUE</option>
-              <option value="RECEIPT">RECEIPT</option>
+              <option value="">All Actions</option>
+              {actionOptions.map((opt) => (
+                <option key={opt} value={opt}>{opt}</option>
+              ))}
             </select>
           </div>
           <div className="col-md-3">
@@ -214,7 +228,7 @@ const ViewPage = () => {
           <div className="col-md-2">
             <label className="filter-label">State</label>
             <select name="state" className="form-select" value={filters.state} onChange={handleFilterChange}>
-              <option value="">All</option>
+              <option value="">All States</option>
               <option value="SERVICEABLE">SERVICEABLE</option>
               <option value="UN-SERVICEABLE">UN-SERVICEABLE</option>
             </select>
@@ -249,15 +263,14 @@ const ViewPage = () => {
                     <td className="ps-4 fw-bold">{index + 1}</td>
                     <td>{formatDateToDisplay(user.date)}</td>
                     <td className="fw-semibold text-primary">{user.pxeSerialNumber}</td>
-                    {/* Applied text-capitalize class below */}
-                    <td className="text-capitalize">{getTypeBadge(user.transactionType)}</td>
+                    <td>{getTypeBadge(user.transactionType)}</td>
                     <td className="text-capitalize">{user.from}</td>
                     <td className="text-capitalize">{user.to}</td>
-                    <td className="text-capitalize">{getStateBadge(user.serviceState)}</td>
-                    <td className="text-capitalize">{user.remarks}</td>
+                    <td>{getStateBadge(user.serviceState)}</td>
+                    <td>{user.remarks || "Ok"}</td>
                     <td className="pe-4">
-                      <button className="btn btn-sm btn-outline-primary me-2" onClick={() => handleEdit(user)}>Edit</button>
-                      <button className="btn btn-sm btn-outline-danger" onClick={() => handleDelete(user._id)}>Delete</button>
+                      <button className="btn btn-sm btn-outline-primary me-2" onClick={() => navigate("/add", { state: { userToEdit: user } })}>Edit</button>
+                      <button className="btn btn-sm btn-outline-danger" onClick={() => { if(window.confirm("Delete record?")) dispatch(deleteUserRequest(user._id)) }}>Delete</button>
                     </td>
                   </tr>
                 ))
