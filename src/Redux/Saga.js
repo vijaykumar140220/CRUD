@@ -19,26 +19,35 @@ import {
 
 const API_URL = "http://localhost:5000/crud-operations";
 
+const getAuthHeaders = () => {
+  const token = localStorage.getItem("token");
+  return {
+    headers: {
+      Authorization: token ? `Bearer ${token}` : "",
+    },
+  };
+};
+
 function* fetchUsersSaga() {
   try {
-    const response = yield call(axios.get, API_URL);
+    const response = yield call(axios.get, API_URL, getAuthHeaders());
     yield put(fetchUsersSuccess(response.data));
   } catch (error) {
     console.error("Error fetching users:", error);
     yield put(
-      fetchUsersFailure(error.response ? error.response.data : error.message),
+      fetchUsersFailure(error.response ? error.response.data : error.message)
     );
   }
 }
 
 function* addUserSaga(action) {
   try {
-    const response = yield call(axios.post, API_URL, action.payload);
+    const response = yield call(axios.post, API_URL, action.payload, getAuthHeaders());
     yield put(addUserSuccess(response.data));
   } catch (error) {
     console.error("Error adding user:", error);
     yield put(
-      addUserFailure(error.response ? error.response.data : error.message),
+      addUserFailure(error.response ? error.response.data : error.message)
     );
   }
 }
@@ -49,24 +58,25 @@ function* editUserSaga(action) {
       axios.put,
       `${API_URL}/${action.payload.id}`,
       action.payload,
+      getAuthHeaders()
     );
     yield put(editUserSuccess(response.data));
   } catch (error) {
     console.error("Error editing user:", error);
     yield put(
-      editUserFailure(error.response ? error.response.data : error.message),
+      editUserFailure(error.response ? error.response.data : error.message)
     );
   }
 }
 
 function* deleteUserSaga(action) {
   try {
-    yield call(axios.delete, `${API_URL}/${action.payload}`);
+    yield call(axios.delete, `${API_URL}/${action.payload}`, getAuthHeaders());
     yield put(deleteUserSuccess(action.payload));
   } catch (error) {
     console.error("Error deleting user:", error);
     yield put(
-      deleteUserFailure(error.response ? error.response.data : error.message),
+      deleteUserFailure(error.response ? error.response.data : error.message)
     );
   }
 }
